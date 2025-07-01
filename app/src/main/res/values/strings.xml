@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">Nukrs EnvCheck</string>
+    <string name="app_description">设备环境安全检测工具</string>
+    
+    <!-- 检测项目 -->
+    <string name="tee_check_title">TEE 检测</string>
+    <string name="tee_check_desc">检测可信执行环境状态</string>
+    
+    <string name="bootloader_check_title">Bootloader 检测</string>
+    <string name="bootloader_check_desc">检测引导加载程序解锁状态</string>
+    
+    <!-- 按钮 -->
+    <string name="start_all_checks">开始全部检测</string>
+    <string name="reset_checks">重置</string>
+    
+    <!-- 状态 -->
+    <string name="status_pending">待检测</string>
+    <string name="status_running">检测中</string>
+    <string name="status_passed">通过</string>
+    <string name="status_failed">失败</string>
+    <string name="status_warning">警告</string>
+</resources>
