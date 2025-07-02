@@ -365,6 +365,7 @@ class CheckService(private val context: Context) {
         val rootApps = arrayOf(
             //magisk
             "com.topjohnwu.magisk",
+            //Sukisu Ultra
             "com.sukisu.ultra"
         )
         
