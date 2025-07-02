@@ -363,18 +363,9 @@ class CheckService(private val context: Context) {
     
     private fun checkRootApps(): Boolean {
         val rootApps = arrayOf(
-            "com.noshufou.android.su",
-            "com.noshufou.android.su.elite",
-            "eu.chainfire.supersu",
-            "com.koushikdutta.superuser",
-            "com.thirdparty.superuser",
-            "com.yellowes.su",
+            //magisk
             "com.topjohnwu.magisk",
-            "com.kingroot.kinguser",
-            "com.kingo.root",
-            "com.smedialink.oneclickroot",
-            "com.zhiqupk.root.global",
-            "com.alephzain.framaroot"
+            "com.sukisu.ultra"
         )
         
         return rootApps.any { packageName ->
