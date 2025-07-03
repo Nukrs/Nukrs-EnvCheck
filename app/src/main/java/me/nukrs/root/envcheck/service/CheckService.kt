@@ -160,59 +160,7 @@ class CheckService(private val context: Context) {
         }
     }
     
-    /**
-     * PM包名检测
-     * 检测可疑应用包名和模拟器环境
-     */
-    suspend fun performPmPackageCheck(): Flow<Pair<CheckStatus, CheckDetails?>> = flow {
-        emit(Pair(CheckStatus.RUNNING, null))
-        try {
-            delay(1200)
-            
-            val pmResults = mutableListOf<Boolean>()
-            
-            // 检测可疑包名
-            pmResults.add(!checkSuspiciousPackages())
-            
-            // 检测模拟器环境
-            pmResults.add(!checkEmulatorEnvironment())
-            
-            // 检测Root应用（重复检查以加强检测）
-            pmResults.add(!checkRootApps())
-            
-            val passedChecks = pmResults.count { it }
-            val totalChecks = pmResults.size
-            val checkNames = listOf("可疑包名检测", "模拟器环境检测", "Root应用检测")
-            
-            val details = CheckDetails(
-                passedChecks = checkNames.filterIndexed { index, _ -> pmResults.getOrNull(index) == true },
-                failedChecks = checkNames.filterIndexed { index, _ -> pmResults.getOrNull(index) == false },
-                warningChecks = emptyList(),
-                score = "${(passedChecks.toFloat() / totalChecks * 100).toInt()}%",
-                recommendation = when {
-                    passedChecks == totalChecks -> "PM包名检测全部通过，未发现可疑应用或模拟器环境。"
-                    passedChecks >= totalChecks * 0.7 -> "大部分检测通过，建议检查并卸载可疑应用。"
-                    else -> "检测到多个安全风险，强烈建议清理设备环境。"
-                }
-            )
-            
-            when {
-                passedChecks == totalChecks -> emit(Pair(CheckStatus.PASSED, details))
-                passedChecks >= totalChecks * 0.7 -> emit(Pair(CheckStatus.WARNING, details))
-                else -> emit(Pair(CheckStatus.FAILED, details))
-            }
-            
-        } catch (e: Exception) {
-            val details = CheckDetails(
-                passedChecks = emptyList(),
-                failedChecks = listOf("PM包名检测异常: ${e.message}"),
-                warningChecks = emptyList(),
-                score = "0%",
-                recommendation = "PM包名检测过程中发生异常，请检查设备兼容性"
-            )
-            emit(Pair(CheckStatus.FAILED, details))
-        }
-    }
+
     
     /**
      * SELinux检测
@@ -633,118 +581,141 @@ class CheckService(private val context: Context) {
         }
     }
     
-    // PM包名检测方法
-    private fun checkSuspiciousPackages(): Boolean {
-        val suspiciousPackages = arrayOf(
-            // Root管理应用
-            "com.topjohnwu.magisk",
-            "io.github.vvb2060.magisk",
-            "com.koushikdutta.superuser",
-            "eu.chainfire.supersu",
-            "me.phh.superuser",
-            
-            // Xposed框架
-            "de.robv.android.xposed.installer",
-            "org.meowcat.edxposed.manager",
-            "org.lsposed.manager",
-            "top.canyie.dreamland.manager",
-            "me.weishu.exp",
-            
-            // 模拟器检测
-            "com.android.vendinf",
-            "com.bluestacks",
-            "com.bignox.app",
-            "com.microvirt.guide",
-            "com.mumu.launcher",
-            
-            // 调试和Hook工具
-            "com.android.development",
-            "com.android.development_settings",
-            "jackpal.androidterm",
-            "com.aide.ui",
-            "com.termux",
-            
-            // 存储重定向
-            "moe.shizuku.redirectstorage",
-            "rikka.appops",
-            "com.catchingnow.icebox"
-        )
-        
-        return suspiciousPackages.any { packageName ->
-            try {
-                context.packageManager.getPackageInfo(packageName, 0)
-                true
-            } catch (e: PackageManager.NameNotFoundException) {
-                false
-            }
-        }
-    }
-    
-    private fun checkEmulatorEnvironment(): Boolean {
-        val emulatorIndicators = mutableListOf<Boolean>()
-        
-        // 检查设备型号
-        val deviceModel = Build.MODEL.lowercase()
-        val deviceManufacturer = Build.MANUFACTURER.lowercase()
-        val deviceProduct = Build.PRODUCT.lowercase()
-        
-        emulatorIndicators.add(
-            deviceModel.contains("emulator") ||
-            deviceModel.contains("simulator") ||
-            deviceManufacturer.contains("genymotion") ||
-            deviceProduct.contains("sdk") ||
-            deviceProduct.contains("emulator")
-        )
-        
-        // 检查CPU架构异常
-        val cpuAbi = Build.SUPPORTED_ABIS.joinToString(",")
-        emulatorIndicators.add(
-            cpuAbi.contains("x86") && !cpuAbi.contains("arm")
-        )
-        
-        // 检查传感器数量（模拟器通常传感器较少）
-        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager
-        val sensorCount = sensorManager.getSensorList(android.hardware.Sensor.TYPE_ALL).size
-        emulatorIndicators.add(sensorCount < 10)
-        
-        return emulatorIndicators.any { it }
-    }
-    
+
+
     // SELinux检测方法
     private fun checkSelinuxStatus(): Boolean {
         return try {
+            //通过getenforce命令检测（最准确）
+            val getenforceResult = executeCommand("getenforce")
+            if (getenforceResult != null) {
+                val isEnforcingByCommand = getenforceResult.equals("Enforcing", true)
+                if (isEnforcingByCommand) return true
+            }
+
+            //原有的系统属性和文件检测
             val selinuxStatus = System.getProperty("ro.boot.selinux")
             val selinuxEnforce = File("/sys/fs/selinux/enforce")
-            
+
             var isEnforcing = false
             if (selinuxEnforce.exists() && selinuxEnforce.canRead()) {
                 val enforceContent = selinuxEnforce.readText().trim()
                 isEnforcing = enforceContent == "1"
+            } else {
+                // 如果无法读取enforce文件，尝试通过命令获取
+                val enforceByCommand = executeCommand("cat /sys/fs/selinux/enforce")
+                if (enforceByCommand != null) {
+                    isEnforcing = enforceByCommand.trim() == "1"
+                }
             }
-            
+
             // 检查SELinux策略
             val policyFile = File("/sepolicy")
             val hasPolicyFile = policyFile.exists()
-            
-            selinuxStatus != "disabled" && isEnforcing && hasPolicyFile
+
+            // 如果系统属性检测失败，尝试其他方法
+            val selinuxEnabled = if (selinuxStatus != null) {
+                selinuxStatus != "disabled"
+            } else {
+                // 备用检测方法
+                checkSelinuxAlternative()
+            }
+
+            selinuxEnabled && isEnforcing && hasPolicyFile
         } catch (e: Exception) {
             false
         }
     }
-    
+
     private fun checkSelinuxPolicy(): Boolean {
         return try {
-            // 检查SELinux上下文
+            //原有的ls -Z检测
             val process = Runtime.getRuntime().exec("ls -Z /system")
             val reader = BufferedReader(InputStreamReader(process.inputStream))
             val output = reader.readText()
             reader.close()
-            
+
             // 正常的SELinux上下文应该包含类型信息
-            output.contains("u:object_r:") && output.contains(":s0")
+            val hasValidContext = output.contains("u:object_r:") && output.contains(":s0")
+
+            if (hasValidContext) {
+                return true
+            }
+
+            //检查当前进程的SELinux上下文
+            val currentContext = executeCommand("cat /proc/self/attr/current")
+            if (currentContext != null && currentContext.contains(":")) {
+                return true
+            }
+
+            //检查SELinux文件系统是否挂载
+            val mountOutput = executeCommand("mount | grep selinuxfs")
+            if (mountOutput != null && mountOutput.contains("selinuxfs")) {
+                return true
+            }
+
+            //备用检测
+            File("/sys/fs/selinux/policy").exists()
         } catch (e: Exception) {
             // 如果无法执行命令，检查基本的SELinux文件
             File("/sys/fs/selinux/policy").exists()
+        }
+    }
+
+    // 执行命令
+    private fun executeCommand(command: String): String? {
+        return try {
+            val process = Runtime.getRuntime().exec(command)
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val result = reader.readText().trim()
+            reader.close()
+
+            // 等待命令执行完成
+            val exitCode = process.waitFor()
+            if (exitCode == 0 && result.isNotEmpty()) {
+                result
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // 备用SELinux检测方法
+    private fun checkSelinuxAlternative(): Boolean {
+        return try {
+            // 检查SELinux相关的系统属性
+            val selinuxProps = listOf(
+                "ro.boot.selinux",
+                "ro.build.selinux",
+                "selinux.reload_policy"
+            )
+
+            for (prop in selinuxProps) {
+                val value = System.getProperty(prop)
+                if (value != null && value != "disabled" && value != "0") {
+                    return true
+                }
+            }
+
+            // 检查SELinux文件系统是否存在
+            val selinuxFiles = listOf(
+                "/sys/fs/selinux",
+                "/selinux",
+                "/sys/fs/selinux/class",
+                "/sys/fs/selinux/policy"
+            )
+
+            for (file in selinuxFiles) {
+                if (File(file).exists()) {
+                    return true
+                }
+            }
+
+            false
+        } catch (e: Exception) {
+            false
         }
     }
     

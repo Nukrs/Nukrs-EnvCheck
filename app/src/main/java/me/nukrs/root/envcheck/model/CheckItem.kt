@@ -48,12 +48,7 @@ val checkItems = listOf(
         description = "检测引导加载程序解锁状态",
         icon = Icons.Default.Lock
     ),
-    CheckItem(
-        id = "pm_package_check",
-        title = "PM 包名检测",
-        description = "检测系统中的敏感包名和应用",
-        icon = Icons.Default.Apps
-    ),
+
     CheckItem(
         id = "selinux_check",
         title = "SELinux 检测",

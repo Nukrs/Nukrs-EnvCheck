@@ -36,7 +36,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val flow = when (itemId) {
                     "tee_check" -> checkService.performTeeCheck()
                     "bootloader_check" -> checkService.performBootloaderCheck()
-                    "pm_package_check" -> checkService.performPmPackageCheck()
                     "selinux_check" -> checkService.performSelinuxCheck()
                     "system_integrity_check" -> checkService.performSystemIntegrityCheck()
                     "network_security_check" -> checkService.performNetworkSecurityCheck()
@@ -75,7 +74,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val flow = when (item.id) {
                         "tee_check" -> checkService.performTeeCheck()
                         "bootloader_check" -> checkService.performBootloaderCheck()
-                        "pm_package_check" -> checkService.performPmPackageCheck()
                         "selinux_check" -> checkService.performSelinuxCheck()
                         "system_integrity_check" -> checkService.performSystemIntegrityCheck()
                         "network_security_check" -> checkService.performNetworkSecurityCheck()

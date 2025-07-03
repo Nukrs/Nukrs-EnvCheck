@@ -22,6 +22,7 @@ import me.nukrs.root.envcheck.ui.components.CheckItemCard
 import me.nukrs.root.envcheck.viewmodel.MainViewModel
 import me.nukrs.root.envcheck.model.CheckItem
 import me.nukrs.root.envcheck.model.CheckStatus
+import me.nukrs.root.envcheck.data.AppInfo
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.animation.core.*
@@ -33,16 +34,40 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.scale
 import androidx.compose.animation.core.FastOutSlowInEasing
 import kotlinx.coroutines.delay
+import me.nukrs.root.envcheck.viewmodel.UpdateViewModel
+import me.nukrs.root.envcheck.ui.components.UpdateDialog
+import androidx.compose.material.icons.filled.Update
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
-    viewModel: MainViewModel = viewModel()
+    viewModel: MainViewModel = viewModel(),
+    updateViewModel: UpdateViewModel = viewModel()
 ) {
     val checkItems by viewModel.checkItemsList.collectAsState()
     val isChecking by viewModel.isChecking.collectAsState()
     val hapticFeedback = LocalHapticFeedback.current
+    val context = LocalContext.current
+    
+    // 更新相关状态
+    val updateState by updateViewModel.updateState.collectAsState()
+    val showUpdateDialog by updateViewModel.showUpdateDialog.collectAsState()
+    
+    // 获取当前应用版本
+    val currentVersion = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
+        } catch (e: Exception) {
+            "1.0.0"
+        }
+    }
+    
+    // 启动时自动检查更新
+    LaunchedEffect(Unit) {
+        updateViewModel.checkForUpdates()
+    }
     
     // 动画状态
     var showCelebration by remember { mutableStateOf(false) }
@@ -187,7 +212,8 @@ fun MainScreen(
             // 关于项目卡片
             item {
                 ProjectInfoCard(
-                    modifier = Modifier.padding(top = 16.dp)
+                    modifier = Modifier.padding(top = 16.dp),
+                    onCheckUpdate = { updateViewModel.checkForUpdates() }
                 )
             }
             
@@ -212,6 +238,15 @@ fun MainScreen(
                 onAnimationEnd = { showFailureEffect = false }
             )
         }
+    }
+    
+    // 更新对话框
+    if (showUpdateDialog) {
+        UpdateDialog(
+            updateState = updateState,
+            currentVersion = currentVersion,
+            onDismiss = { updateViewModel.dismissUpdateDialog() }
+        )
     }
 }
 
@@ -339,7 +374,7 @@ fun AuthorInfoCard(
             
             // 作者信息
             Text(
-                text = "开发者: Nukrs",
+                text = "开发者: ${AppInfo.AUTHOR_NAME}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -350,7 +385,7 @@ fun AuthorInfoCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clickable {
-                        uriHandler.openUri("https://nukrs.com")
+                        uriHandler.openUri(AppInfo.AUTHOR_WEBSITE)
                     }
                     .padding(vertical = 4.dp)
             ) {
@@ -362,7 +397,7 @@ fun AuthorInfoCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "个人网站: nukrs.com",
+                    text = "个人网站: ${AppInfo.AUTHOR_WEBSITE.removePrefix("https://")}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
@@ -378,12 +413,12 @@ fun AuthorInfoCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "版本: v1.0.0",
+                    text = "版本: v${AppInfo.APP_VERSION}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "构建: 2025.07.01",
+                    text = "构建: ${AppInfo.BUILD_TIME}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -839,7 +874,8 @@ fun FailedChecksSummaryCard(
 
 @Composable
 fun ProjectInfoCard(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onCheckUpdate: () -> Unit = {}
 ) {
     val uriHandler = LocalUriHandler.current
     
@@ -876,7 +912,7 @@ fun ProjectInfoCard(
             
             // 项目描述
             Text(
-                text = "Nukrs EnvCheck 是一个简单的 Android 环境检查工具，适用于开发者和用户进行设备安全检测。",
+                text = AppInfo.PROJECT_DESCRIPTION,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -887,7 +923,7 @@ fun ProjectInfoCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clickable {
-                        uriHandler.openUri("https://github.com/Nukrs/Nukrs-EnvCheck/")
+                        uriHandler.openUri(AppInfo.PROJECT_GITHUB)
                     }
                     .padding(vertical = 4.dp)
             ) {
@@ -899,7 +935,7 @@ fun ProjectInfoCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "GitHub: Nukrs/Nukrs-EnvCheck",
+                    text = "GitHub: ${AppInfo.PROJECT_GITHUB.removePrefix("https://github.com/").removeSuffix("/")}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
@@ -911,7 +947,7 @@ fun ProjectInfoCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clickable {
-                        uriHandler.openUri("https://t.me/nukrsenvcheck")
+                        uriHandler.openUri(AppInfo.PROJECT_TELEGRAM)
                     }
                     .padding(vertical = 4.dp)
             ) {
@@ -923,11 +959,30 @@ fun ProjectInfoCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Telegram: @nukrsenvcheck",
+                    text = "Telegram: ${AppInfo.PROJECT_TELEGRAM.removePrefix("https://t.me/")}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // 检查更新按钮
+            Button(
+                onClick = onCheckUpdate,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Update,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("检查更新")
             }
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -940,7 +995,7 @@ fun ProjectInfoCard(
                 )
             ) {
                 Text(
-                    text = "📄 本项目基于 MIT 许可证开源，欢迎贡献代码和提交问题反馈！",
+                    text = "📄 本项目基于 ${AppInfo.PROJECT_LICENSE} 开源，欢迎贡献代码和提交问题反馈！",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(12.dp)
