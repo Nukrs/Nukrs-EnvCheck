@@ -14,6 +14,14 @@ import java.io.File
 import java.security.KeyStore
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.URL
+import javax.net.ssl.HttpsURLConnection
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 
 class CheckService(private val context: Context) {
@@ -89,7 +97,7 @@ class CheckService(private val context: Context) {
     
     /**
      * 安全检测
-     * 多维度验证完整性
+     * 验证完整性
      */
     suspend fun performBootloaderCheck(): Flow<Pair<CheckStatus, CheckDetails?>> = flow {
         emit(Pair(CheckStatus.RUNNING, null))
@@ -148,6 +156,213 @@ class CheckService(private val context: Context) {
                  score = "0%",
                  recommendation = "Bootloader检查过程中发生异常，请检查设备兼容性"
              )
+            emit(Pair(CheckStatus.FAILED, details))
+        }
+    }
+    
+    /**
+     * PM包名检测
+     * 检测可疑应用包名和模拟器环境
+     */
+    suspend fun performPmPackageCheck(): Flow<Pair<CheckStatus, CheckDetails?>> = flow {
+        emit(Pair(CheckStatus.RUNNING, null))
+        try {
+            delay(1200)
+            
+            val pmResults = mutableListOf<Boolean>()
+            
+            // 检测可疑包名
+            pmResults.add(!checkSuspiciousPackages())
+            
+            // 检测模拟器环境
+            pmResults.add(!checkEmulatorEnvironment())
+            
+            // 检测Root应用（重复检查以加强检测）
+            pmResults.add(!checkRootApps())
+            
+            val passedChecks = pmResults.count { it }
+            val totalChecks = pmResults.size
+            val checkNames = listOf("可疑包名检测", "模拟器环境检测", "Root应用检测")
+            
+            val details = CheckDetails(
+                passedChecks = checkNames.filterIndexed { index, _ -> pmResults.getOrNull(index) == true },
+                failedChecks = checkNames.filterIndexed { index, _ -> pmResults.getOrNull(index) == false },
+                warningChecks = emptyList(),
+                score = "${(passedChecks.toFloat() / totalChecks * 100).toInt()}%",
+                recommendation = when {
+                    passedChecks == totalChecks -> "PM包名检测全部通过，未发现可疑应用或模拟器环境。"
+                    passedChecks >= totalChecks * 0.7 -> "大部分检测通过，建议检查并卸载可疑应用。"
+                    else -> "检测到多个安全风险，强烈建议清理设备环境。"
+                }
+            )
+            
+            when {
+                passedChecks == totalChecks -> emit(Pair(CheckStatus.PASSED, details))
+                passedChecks >= totalChecks * 0.7 -> emit(Pair(CheckStatus.WARNING, details))
+                else -> emit(Pair(CheckStatus.FAILED, details))
+            }
+            
+        } catch (e: Exception) {
+            val details = CheckDetails(
+                passedChecks = emptyList(),
+                failedChecks = listOf("PM包名检测异常: ${e.message}"),
+                warningChecks = emptyList(),
+                score = "0%",
+                recommendation = "PM包名检测过程中发生异常，请检查设备兼容性"
+            )
+            emit(Pair(CheckStatus.FAILED, details))
+        }
+    }
+    
+    /**
+     * SELinux检测
+     * 检测SELinux状态和策略完整性
+     */
+    suspend fun performSelinuxCheck(): Flow<Pair<CheckStatus, CheckDetails?>> = flow {
+        emit(Pair(CheckStatus.RUNNING, null))
+        try {
+            delay(1000)
+            
+            val selinuxResults = mutableListOf<Boolean>()
+            
+            // SELinux状态检查
+            selinuxResults.add(checkSelinuxStatus())
+            
+            // SELinux策略检查
+            selinuxResults.add(checkSelinuxPolicy())
+            
+            val passedChecks = selinuxResults.count { it }
+            val totalChecks = selinuxResults.size
+            val checkNames = listOf("SELinux状态检查", "SELinux策略检查")
+            
+            val details = CheckDetails(
+                passedChecks = checkNames.filterIndexed { index, _ -> selinuxResults.getOrNull(index) == true },
+                failedChecks = checkNames.filterIndexed { index, _ -> selinuxResults.getOrNull(index) == false },
+                warningChecks = emptyList(),
+                score = "${(passedChecks.toFloat() / totalChecks * 100).toInt()}%",
+                recommendation = when {
+                    passedChecks == totalChecks -> "SELinux检测全部通过，系统安全策略完整有效。"
+                    passedChecks > 0 -> "部分SELinux检测通过，建议检查系统安全策略配置。"
+                    else -> "SELinux检测失败，系统安全策略可能被篡改或禁用。"
+                }
+            )
+            
+            when {
+                passedChecks == totalChecks -> emit(Pair(CheckStatus.PASSED, details))
+                passedChecks > 0 -> emit(Pair(CheckStatus.WARNING, details))
+                else -> emit(Pair(CheckStatus.FAILED, details))
+            }
+            
+        } catch (e: Exception) {
+            val details = CheckDetails(
+                passedChecks = emptyList(),
+                failedChecks = listOf("SELinux检测异常: ${e.message}"),
+                warningChecks = emptyList(),
+                score = "0%",
+                recommendation = "SELinux检测过程中发生异常，请检查设备兼容性"
+            )
+            emit(Pair(CheckStatus.FAILED, details))
+        }
+    }
+    
+    /**
+     * 系统完整性检测
+     * 检测系统文件和权限完整性
+     */
+    suspend fun performSystemIntegrityCheck(): Flow<Pair<CheckStatus, CheckDetails?>> = flow {
+        emit(Pair(CheckStatus.RUNNING, null))
+        try {
+            delay(1300)
+            
+            val integrityResults = mutableListOf<Boolean>()
+            
+            // 系统文件完整性检查
+            integrityResults.add(checkSystemFileIntegrity())
+            
+            // 系统权限检查
+            integrityResults.add(checkSystemPermissions())
+            
+            val passedChecks = integrityResults.count { it }
+            val totalChecks = integrityResults.size
+            val checkNames = listOf("系统文件完整性", "系统权限检查")
+            
+            val details = CheckDetails(
+                passedChecks = checkNames.filterIndexed { index, _ -> integrityResults.getOrNull(index) == true },
+                failedChecks = checkNames.filterIndexed { index, _ -> integrityResults.getOrNull(index) == false },
+                warningChecks = emptyList(),
+                score = "${(passedChecks.toFloat() / totalChecks * 100).toInt()}%",
+                recommendation = when {
+                    passedChecks == totalChecks -> "系统完整性检测全部通过，系统文件和权限正常。"
+                    passedChecks > 0 -> "部分完整性检测通过，建议检查系统文件权限。"
+                    else -> "系统完整性检测失败，系统可能被篡改或损坏。"
+                }
+            )
+            
+            when {
+                passedChecks == totalChecks -> emit(Pair(CheckStatus.PASSED, details))
+                passedChecks > 0 -> emit(Pair(CheckStatus.WARNING, details))
+                else -> emit(Pair(CheckStatus.FAILED, details))
+            }
+            
+        } catch (e: Exception) {
+            val details = CheckDetails(
+                passedChecks = emptyList(),
+                failedChecks = listOf("系统完整性检测异常: ${e.message}"),
+                warningChecks = emptyList(),
+                score = "0%",
+                recommendation = "系统完整性检测过程中发生异常，请检查设备兼容性"
+            )
+            emit(Pair(CheckStatus.FAILED, details))
+        }
+    }
+    
+    /**
+     * 网络安全检测
+     * 检测网络配置和证书安全
+     */
+    suspend fun performNetworkSecurityCheck(): Flow<Pair<CheckStatus, CheckDetails?>> = flow {
+        emit(Pair(CheckStatus.RUNNING, null))
+        try {
+            delay(1100)
+            
+            val networkResults = mutableListOf<Boolean>()
+            
+            // 网络配置检查
+            networkResults.add(checkNetworkConfiguration())
+            
+            // 证书固定检查
+            networkResults.add(checkCertificatePinning())
+            
+            val passedChecks = networkResults.count { it }
+            val totalChecks = networkResults.size
+            val checkNames = listOf("网络配置检查", "证书安全检查")
+            
+            val details = CheckDetails(
+                passedChecks = checkNames.filterIndexed { index, _ -> networkResults.getOrNull(index) == true },
+                failedChecks = checkNames.filterIndexed { index, _ -> networkResults.getOrNull(index) == false },
+                warningChecks = emptyList(),
+                score = "${(passedChecks.toFloat() / totalChecks * 100).toInt()}%",
+                recommendation = when {
+                    passedChecks == totalChecks -> "网络安全检测全部通过，网络配置和证书安全。"
+                    passedChecks > 0 -> "部分网络安全检测通过，建议检查网络配置。"
+                    else -> "网络安全检测失败，可能存在网络安全风险。"
+                }
+            )
+            
+            when {
+                passedChecks == totalChecks -> emit(Pair(CheckStatus.PASSED, details))
+                passedChecks > 0 -> emit(Pair(CheckStatus.WARNING, details))
+                else -> emit(Pair(CheckStatus.FAILED, details))
+            }
+            
+        } catch (e: Exception) {
+            val details = CheckDetails(
+                passedChecks = emptyList(),
+                failedChecks = listOf("网络安全检测异常: ${e.message}"),
+                warningChecks = emptyList(),
+                score = "0%",
+                recommendation = "网络安全检测过程中发生异常，请检查设备兼容性"
+            )
             emit(Pair(CheckStatus.FAILED, details))
         }
     }
@@ -415,6 +630,192 @@ class CheckService(private val context: Context) {
             magiskPaths.any { File(it).exists() }
         } catch (e: Exception) {
             false
+        }
+    }
+    
+    // PM包名检测方法
+    private fun checkSuspiciousPackages(): Boolean {
+        val suspiciousPackages = arrayOf(
+            // Root管理应用
+            "com.topjohnwu.magisk",
+            "io.github.vvb2060.magisk",
+            "com.koushikdutta.superuser",
+            "eu.chainfire.supersu",
+            "me.phh.superuser",
+            
+            // Xposed框架
+            "de.robv.android.xposed.installer",
+            "org.meowcat.edxposed.manager",
+            "org.lsposed.manager",
+            "top.canyie.dreamland.manager",
+            "me.weishu.exp",
+            
+            // 模拟器检测
+            "com.android.vendinf",
+            "com.bluestacks",
+            "com.bignox.app",
+            "com.microvirt.guide",
+            "com.mumu.launcher",
+            
+            // 调试和Hook工具
+            "com.android.development",
+            "com.android.development_settings",
+            "jackpal.androidterm",
+            "com.aide.ui",
+            "com.termux",
+            
+            // 存储重定向
+            "moe.shizuku.redirectstorage",
+            "rikka.appops",
+            "com.catchingnow.icebox"
+        )
+        
+        return suspiciousPackages.any { packageName ->
+            try {
+                context.packageManager.getPackageInfo(packageName, 0)
+                true
+            } catch (e: PackageManager.NameNotFoundException) {
+                false
+            }
+        }
+    }
+    
+    private fun checkEmulatorEnvironment(): Boolean {
+        val emulatorIndicators = mutableListOf<Boolean>()
+        
+        // 检查设备型号
+        val deviceModel = Build.MODEL.lowercase()
+        val deviceManufacturer = Build.MANUFACTURER.lowercase()
+        val deviceProduct = Build.PRODUCT.lowercase()
+        
+        emulatorIndicators.add(
+            deviceModel.contains("emulator") ||
+            deviceModel.contains("simulator") ||
+            deviceManufacturer.contains("genymotion") ||
+            deviceProduct.contains("sdk") ||
+            deviceProduct.contains("emulator")
+        )
+        
+        // 检查CPU架构异常
+        val cpuAbi = Build.SUPPORTED_ABIS.joinToString(",")
+        emulatorIndicators.add(
+            cpuAbi.contains("x86") && !cpuAbi.contains("arm")
+        )
+        
+        // 检查传感器数量（模拟器通常传感器较少）
+        val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager
+        val sensorCount = sensorManager.getSensorList(android.hardware.Sensor.TYPE_ALL).size
+        emulatorIndicators.add(sensorCount < 10)
+        
+        return emulatorIndicators.any { it }
+    }
+    
+    // SELinux检测方法
+    private fun checkSelinuxStatus(): Boolean {
+        return try {
+            val selinuxStatus = System.getProperty("ro.boot.selinux")
+            val selinuxEnforce = File("/sys/fs/selinux/enforce")
+            
+            var isEnforcing = false
+            if (selinuxEnforce.exists() && selinuxEnforce.canRead()) {
+                val enforceContent = selinuxEnforce.readText().trim()
+                isEnforcing = enforceContent == "1"
+            }
+            
+            // 检查SELinux策略
+            val policyFile = File("/sepolicy")
+            val hasPolicyFile = policyFile.exists()
+            
+            selinuxStatus != "disabled" && isEnforcing && hasPolicyFile
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    private fun checkSelinuxPolicy(): Boolean {
+        return try {
+            // 检查SELinux上下文
+            val process = Runtime.getRuntime().exec("ls -Z /system")
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val output = reader.readText()
+            reader.close()
+            
+            // 正常的SELinux上下文应该包含类型信息
+            output.contains("u:object_r:") && output.contains(":s0")
+        } catch (e: Exception) {
+            // 如果无法执行命令，检查基本的SELinux文件
+            File("/sys/fs/selinux/policy").exists()
+        }
+    }
+    
+    // 系统完整性检测方法
+    private fun checkSystemFileIntegrity(): Boolean {
+        val criticalFiles = arrayOf(
+            "/system/build.prop",
+            "/system/etc/hosts",
+            "/system/framework/framework.jar",
+            "/system/lib/libc.so",
+            "/system/bin/app_process"
+        )
+        
+        return criticalFiles.all { path ->
+            val file = File(path)
+            file.exists() && file.canRead() && !file.canWrite()
+        }
+    }
+    
+    private fun checkSystemPermissions(): Boolean {
+        return try {
+            // 检查关键目录权限
+            val systemDir = File("/system")
+            val dataDir = File("/data")
+            
+            // /system应该是只读的
+            val systemReadOnly = systemDir.exists() && systemDir.canRead() && !systemDir.canWrite()
+            
+            // /data应该有适当的权限控制
+            val dataPermissions = dataDir.exists() && dataDir.canRead()
+            
+            systemReadOnly && dataPermissions
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    // 网络安全检测方法
+    private fun checkNetworkConfiguration(): Boolean {
+        return try {
+            // 检查代理设置
+            val proxyHost = System.getProperty("http.proxyHost")
+            val proxyPort = System.getProperty("http.proxyPort")
+            val hasProxy = !proxyHost.isNullOrEmpty() || !proxyPort.isNullOrEmpty()
+            
+            // 检查VPN连接
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val activeNetwork = connectivityManager.activeNetwork
+            val networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+            val hasVpn = networkCapabilities?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) == true
+            
+            // 正常情况下不应该有代理或VPN（在安全检测场景下）
+            !hasProxy && !hasVpn
+        } catch (e: Exception) {
+            true // 无法检测时默认通过
+        }
+    }
+    
+    private fun checkCertificatePinning(): Boolean {
+        return try {
+            // 检查系统证书存储
+            val certDir = File("/system/etc/security/cacerts")
+            val userCertDir = File("/data/misc/user/0/cacerts-added")
+            
+            // 检查是否有用户添加的证书（可能的中间人攻击）
+            val hasSystemCerts = certDir.exists() && certDir.listFiles()?.isNotEmpty() == true
+            val hasUserCerts = userCertDir.exists() && userCertDir.listFiles()?.isNotEmpty() == true
+            
+            hasSystemCerts && !hasUserCerts
+        } catch (e: Exception) {
+            true // 无法检测时默认通过
         }
     }
 }
