@@ -39,6 +39,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "selinux_check" -> checkService.performSelinuxCheck()
                     "system_integrity_check" -> checkService.performSystemIntegrityCheck()
                     "network_security_check" -> checkService.performNetworkSecurityCheck()
+                    "dangerous_apps_check" -> checkService.performDangerousAppsCheck()
                     else -> return@launch
                 }
                 
@@ -77,6 +78,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         "selinux_check" -> checkService.performSelinuxCheck()
                         "system_integrity_check" -> checkService.performSystemIntegrityCheck()
                         "network_security_check" -> checkService.performNetworkSecurityCheck()
+                        "dangerous_apps_check" -> checkService.performDangerousAppsCheck()
                         else -> continue
                     }
                     

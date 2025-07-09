@@ -8,7 +8,7 @@ import java.util.*
 object AppInfo {
     
     // 应用版本信息
-    const val APP_VERSION = "1.1.0"
+    const val APP_VERSION = "1.1.1"
     const val VERSION_CODE = 1
     
     // 作者信息
@@ -24,8 +24,8 @@ object AppInfo {
     const val PROJECT_TELEGRAM = "https://t.me/nukrsenvcheck"
     const val PROJECT_LICENSE = "MIT License"
     
-    const val BUILD_TIME = "2025-07-09 00:20:00"
-    const val BUILD_DATE = "2025-07-09"
+    const val BUILD_TIME = "2025-07-10 00:20:00"
+    const val BUILD_DATE = "2025-07-10"
     
     // 获取完整的版本信息
     fun getFullVersionInfo(): String {

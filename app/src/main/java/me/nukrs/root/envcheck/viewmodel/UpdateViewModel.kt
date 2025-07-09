@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import me.nukrs.root.envcheck.service.UpdateService
 import me.nukrs.root.envcheck.service.UpdateCheckResult
 
@@ -34,8 +36,16 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _updateState.value = UpdateState.Checking
             
+            // 手动检测时立即显示检查对话框
+            if (!isAutoCheck) {
+                _showUpdateDialog.value = true
+            }
+            
             try {
-                val result = updateService.checkForUpdates()
+                // 设置10秒超时
+                val result = withTimeout(10000L) {
+                    updateService.checkForUpdates()
+                }
                 _updateResult.value = result
                 
                 when {
@@ -57,6 +67,11 @@ class UpdateViewModel(application: Application) : AndroidViewModel(application) 
                             _showUpdateDialog.value = true
                         }
                     }
+                }
+            } catch (e: TimeoutCancellationException) {
+                _updateState.value = UpdateState.Error("检测失败：网络无响应")
+                if (!isAutoCheck) {
+                    _showUpdateDialog.value = true
                 }
             } catch (e: Exception) {
                 _updateState.value = UpdateState.Error(e.message ?: "检查更新失败")

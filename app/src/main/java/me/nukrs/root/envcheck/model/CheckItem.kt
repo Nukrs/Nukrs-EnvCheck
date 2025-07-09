@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.NetworkCheck
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.graphics.vector.ImageVector
 
 data class CheckItem(
@@ -66,5 +67,11 @@ val checkItems = listOf(
         title = "网络安全检测",
         description = "检测网络配置和证书安全",
         icon = Icons.Default.NetworkCheck
+    ),
+    CheckItem(
+        id = "dangerous_apps_check",
+        title = "危险应用检测",
+        description = "检测破解工具、Hook框架等危险应用",
+        icon = Icons.Default.Warning
     )
 )
