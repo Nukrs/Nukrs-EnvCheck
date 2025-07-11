@@ -2,13 +2,18 @@ package me.nukrs.root.envcheck.ui.screen
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,7 +21,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.BorderStroke
 import androidx.lifecycle.viewmodel.compose.viewModel
 import me.nukrs.root.envcheck.ui.components.CheckItemCard
 import me.nukrs.root.envcheck.viewmodel.MainViewModel
@@ -38,6 +50,10 @@ import me.nukrs.root.envcheck.viewmodel.UpdateViewModel
 import me.nukrs.root.envcheck.ui.components.UpdateDialog
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.zIndex
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlin.math.min
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,9 +67,18 @@ fun MainScreen(
     val hapticFeedback = LocalHapticFeedback.current
     val context = LocalContext.current
     
+    // 滚动状态
+    val listState = rememberLazyListState()
+    
     // 更新相关状态
     val updateState by updateViewModel.updateState.collectAsState()
     val showUpdateDialog by updateViewModel.showUpdateDialog.collectAsState()
+    val updateResult by updateViewModel.updateResult.collectAsState()
+    
+    // 免责声明弹窗状态
+    var showDisclaimerDialog by remember { mutableStateOf(true) }
+    var disclaimerCountdown by remember { mutableStateOf(3) }
+    var canDismissDisclaimer by remember { mutableStateOf(false) }
     
     // 获取当前应用版本
     val currentVersion = remember {
@@ -64,9 +89,39 @@ fun MainScreen(
         }
     }
     
+    // 当前时间状态
+    var currentTime by remember { mutableStateOf("") }
+    
+    // 更新时间
+    LaunchedEffect(Unit) {
+        while (true) {
+            val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+            currentTime = formatter.format(Date())
+            delay(60000) // 每分钟更新一次
+        }
+    }
+    
+    // 计算标题栏收缩状态
+    val isCollapsed by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 200
+        }
+    }
+    
     // 启动时自动检查更新
     LaunchedEffect(Unit) {
         updateViewModel.checkForUpdates()
+    }
+    
+    // 免责声明倒计时
+    LaunchedEffect(showDisclaimerDialog) {
+        if (showDisclaimerDialog && disclaimerCountdown > 0) {
+            while (disclaimerCountdown > 0) {
+                delay(1000)
+                disclaimerCountdown--
+            }
+            canDismissDisclaimer = true
+        }
     }
     
     // 动画状态
@@ -94,90 +149,158 @@ fun MainScreen(
         }
     }
     
-    // 一键通过功能
-    fun simulateAllPass() {
-        viewModel.simulateAllPass()
-    }
+
     
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // 标题区域
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Nukrs EnvCheck",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "设备环境安全检测工具",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-        
-        // 操作按钮区域
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = { viewModel.startAllChecks() },
-                modifier = Modifier.weight(1f),
-                enabled = !isChecking
-            ) {
-                if (isChecking) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f),
+                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.05f),
+                        MaterialTheme.colorScheme.surface
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text("开始测试")
-            }
-            
-            // 一键通过按钮
-            SimulatePassButton(
-                onClick = { simulateAllPass() },
-                enabled = !isChecking,
-                modifier = Modifier.weight(1f)
+                )
             )
-            
-            OutlinedButton(
-                onClick = { viewModel.resetAllChecks() },
-                modifier = Modifier.weight(0.8f),
-                enabled = !isChecking
-            ) {
-                Text("重置")
-            }
-        }
-        
-        // 检测项目列表
+    ) {
+        // 主内容区域
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = if (isCollapsed) 80.dp else 16.dp,
+                bottom = 16.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // 完整标题区域（仅在未收缩时显示）
+            if (!isCollapsed) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    shape = RoundedCornerShape(32.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Text(
+                            text = "Nukrs EnvCheck",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "🛡️ 娱乐化设备检测工具",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        
+            // 操作按钮区域
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = if (isCollapsed) 8.dp else 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // 开始检测按钮
+                    Button(
+                        onClick = { viewModel.startAllChecks() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                        enabled = !isChecking,
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        if (isChecking) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "检测中",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "开始检测",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                    
+                    // 重置按钮
+                    OutlinedButton(
+                        onClick = { viewModel.resetAllChecks() },
+                        modifier = Modifier
+                            .weight(0.6f)
+                            .height(56.dp),
+                        enabled = !isChecking,
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            "重置",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        
+            // 安全检测综合评价
+            if (hasResults) {
+                item {
+                    SecurityResultCard(
+                        checkItems = checkItems,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+            }
+                
+            // 检测项目列表
             items(checkItems) { item ->
                 CheckItemCard(
                     checkItem = item,
@@ -194,25 +317,17 @@ fun MainScreen(
                 )
             }
             
-            // 底部汇总卡片
-            item {
-                FailedChecksSummaryCard(
-                    checkItems = checkItems,
-                    modifier = Modifier.padding(top = 16.dp)
-                )
-            }
-            
             // Root建议模块
             item {
                 RootSuggestionsCard(
-                    modifier = Modifier.padding(top = 16.dp)
+                    modifier = Modifier.padding(top = 20.dp)
                 )
             }
             
             // 关于项目卡片
             item {
                 ProjectInfoCard(
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(top = 20.dp),
                     onCheckUpdate = { updateViewModel.checkForUpdates() }
                 )
             }
@@ -220,9 +335,48 @@ fun MainScreen(
             // 作者信息卡片
             item {
                 AuthorInfoCard(
-                    modifier = Modifier.padding(top = 16.dp)
+                    modifier = Modifier.padding(top = 20.dp)
                 )
             }
+        }
+        
+        // 顶部收缩标题栏
+        if (isCollapsed) {
+            TopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Security,
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Nukrs EnvCheck",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            text = currentTime,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                modifier = Modifier.zIndex(1f),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                )
+            )
         }
         
         // 庆祝动画效果
@@ -245,7 +399,21 @@ fun MainScreen(
         UpdateDialog(
             updateState = updateState,
             currentVersion = currentVersion,
+            currentVersionInfo = updateResult?.currentVersionInfo,
             onDismiss = { updateViewModel.dismissUpdateDialog() }
+        )
+    }
+    
+    // 免责声明对话框
+    if (showDisclaimerDialog) {
+        DisclaimerDialog(
+            countdown = disclaimerCountdown,
+            canDismiss = canDismissDisclaimer,
+            onDismiss = { 
+                showDisclaimerDialog = false
+                disclaimerCountdown = 3
+                canDismissDisclaimer = false
+            }
         )
     }
 }
@@ -255,11 +423,17 @@ fun RootSuggestionsCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 3.dp,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.05f)
+            ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
@@ -342,11 +516,17 @@ fun AuthorInfoCard(
     val uriHandler = LocalUriHandler.current
     
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 3.dp,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
@@ -428,21 +608,83 @@ fun AuthorInfoCard(
 }
 
 @Composable
-fun SimulatePassButton(
-    onClick: () -> Unit,
-    enabled: Boolean,
-    modifier: Modifier = Modifier
+fun DisclaimerDialog(
+    countdown: Int,
+    canDismiss: Boolean,
+    onDismiss: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.secondary
-        )
-    ) {
-        Text("一键通过")
-    }
+    AlertDialog(
+        onDismissRequest = { if (canDismiss) onDismiss() },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ErrorOutline,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "⚠️ 重要声明",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        },
+        text = {
+            Column {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Text(
+                        text = "本检测系娱乐，如果您有异议，那一定您是对的。",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Text(
+                    text = "• 本应用仅供娱乐和学习目的\n• 检测结果不代表设备真实安全状态\n• 请勿将检测结果用于任何商业或安全决策",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                enabled = canDismiss,
+                modifier = Modifier.height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                if (!canDismiss) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    text = if (canDismiss) "我已知晓" else "请等待 ${countdown}s",
+                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 12.dp
+    )
 }
 
 @Composable
@@ -589,6 +831,100 @@ fun FailureEffect(
 }
 
 
+
+@Composable
+fun SecurityResultCard(
+    checkItems: List<CheckItem>,
+    modifier: Modifier = Modifier
+) {
+    val hasResults = checkItems.any { it.status != CheckStatus.PENDING }
+    val allPassed = checkItems.all { it.status == CheckStatus.PASSED } && hasResults
+    val failedCount = checkItems.count { it.status == CheckStatus.FAILED }
+    val warningCount = checkItems.count { it.status == CheckStatus.WARNING }
+    
+    if (hasResults) {
+        Card(
+            modifier = modifier
+                .fillMaxWidth()
+                .shadow(
+                    elevation = 6.dp,
+                    shape = RoundedCornerShape(20.dp),
+                    ambientColor = if (allPassed) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                    } else {
+                        MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                    }
+                ),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.Transparent
+            ),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = if (allPassed) {
+                                listOf(
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                )
+                            } else {
+                                listOf(
+                                    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
+                                    MaterialTheme.colorScheme.error.copy(alpha = 0.05f)
+                                )
+                            }
+                        ),
+                        shape = RoundedCornerShape(20.dp)
+                    )
+            ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 大型黄脸emoji表示检测结果
+                Text(
+                    text = if (allPassed) "😊" else if (failedCount > 0) "😰" else "😐",
+                    style = MaterialTheme.typography.displayLarge.copy(fontSize = 48.sp),
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                
+                // 简化的综合评价
+                Text(
+                    text = when {
+                        allPassed -> "设备安全检查全部通过"
+                        failedCount > 2 -> "设备存在严重安全风险"
+                        failedCount > 0 -> "设备存在安全风险"
+                        warningCount > 0 -> "设备基本安全"
+                        else -> "检测完成"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (allPassed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    textAlign = TextAlign.Center
+                )
+                
+                // 简要统计
+                if (hasResults) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "通过: ${checkItems.count { it.status == CheckStatus.PASSED }} | " +
+                               "失败: $failedCount | " +
+                               "警告: $warningCount",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+            }
+        }
+    }
+}
 
 @Composable
 fun FailedChecksSummaryCard(
@@ -880,11 +1216,17 @@ fun ProjectInfoCard(
     val uriHandler = LocalUriHandler.current
     
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 3.dp,
+                shape = RoundedCornerShape(16.dp),
+                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
@@ -971,18 +1313,29 @@ fun ProjectInfoCard(
             // 检查更新按钮
             Button(
                 onClick = onCheckUpdate,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .shadow(
+                        elevation = 6.dp,
+                        shape = RoundedCornerShape(12.dp)
+                    ),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary
-                )
+                ),
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Update,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("检查更新")
+                Text(
+                    "检查更新",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
             }
             
             Spacer(modifier = Modifier.height(8.dp))

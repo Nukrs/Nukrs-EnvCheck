@@ -24,6 +24,7 @@ import me.nukrs.root.envcheck.viewmodel.UpdateState
 fun UpdateDialog(
     updateState: UpdateState,
     currentVersion: String,
+    currentVersionInfo: VersionInfo? = null,
     onDismiss: () -> Unit,
     onDownload: (String) -> Unit = {},
     modifier: Modifier = Modifier
@@ -56,6 +57,7 @@ fun UpdateDialog(
                     is UpdateState.UpToDate -> {
                         UpToDateContent(
                             currentVersion = currentVersion,
+                            currentVersionInfo = currentVersionInfo,
                             onDismiss = onDismiss
                         )
                     }
@@ -272,6 +274,7 @@ private fun UpdateAvailableContent(
 @Composable
 private fun UpToDateContent(
     currentVersion: String,
+    currentVersionInfo: VersionInfo? = null,
     onDismiss: () -> Unit
 ) {
     Icon(
@@ -297,14 +300,57 @@ private fun UpToDateContent(
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     
-    Spacer(modifier = Modifier.height(16.dp))
-    
-    Text(
-        text = "您正在使用最新版本的应用",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center
-    )
+    // 显示当前版本的更新内容
+    if (currentVersionInfo != null && currentVersionInfo.releaseNotes.isNotEmpty() && currentVersionInfo.releaseNotes != "当前版本") {
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = "当前版本更新内容",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                Text(
+                    text = currentVersionInfo.releaseNotes,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .heightIn(max = 120.dp)
+                        .verticalScroll(rememberScrollState())
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "您正在使用最新版本的应用",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    } else {
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "您正在使用最新版本的应用",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
     
     Spacer(modifier = Modifier.height(24.dp))
     

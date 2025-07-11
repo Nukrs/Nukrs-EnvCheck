@@ -23,6 +23,7 @@ data class UpdateCheckResult(
     val hasUpdate: Boolean,
     val versionInfo: VersionInfo? = null,
     val currentVersion: String,
+    val currentVersionInfo: VersionInfo? = null,
     val error: String? = null
 )
 
@@ -43,15 +44,33 @@ class UpdateService(private val context: Context) {
             val currentVersion = getCurrentVersion()
             val currentVersionCode = getCurrentVersionCode()
             
-            val versionInfo = fetchVersionInfo()
+            val latestVersionInfo = fetchVersionInfo()
             
             // 使用语义化版本比较
-            val hasUpdate = compareSemanticVersions(currentVersion, versionInfo.versionName) < 0
+            val hasUpdate = compareSemanticVersions(currentVersion, latestVersionInfo.versionName) < 0
+            
+            val currentVersionInfo = if (!hasUpdate) {
+                latestVersionInfo
+            } else {
+                try {
+                    fetchVersionInfo(currentVersion)
+                } catch (e: Exception) {
+                    VersionInfo(
+                        versionName = currentVersion,
+                        versionCode = currentVersionCode,
+                        downloadUrl = "",
+                        releaseNotes = "当前版本",
+                        isForceUpdate = false,
+                        minSupportedVersion = 1
+                    )
+                }
+            }
             
             UpdateCheckResult(
                 hasUpdate = hasUpdate,
-                versionInfo = if (hasUpdate) versionInfo else null,
-                currentVersion = currentVersion
+                versionInfo = if (hasUpdate) latestVersionInfo else null,
+                currentVersion = currentVersion,
+                currentVersionInfo = currentVersionInfo
             )
         } catch (e: Exception) {
             UpdateCheckResult(
@@ -64,6 +83,31 @@ class UpdateService(private val context: Context) {
     
     private suspend fun fetchVersionInfo(): VersionInfo = withContext(Dispatchers.IO) {
         val url = URL(UPDATE_CHECK_URL)
+        val connection = url.openConnection() as HttpURLConnection
+        
+        try {
+            connection.apply {
+                requestMethod = "GET"
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                setRequestProperty("User-Agent", "NukrsEnvCheck/${getCurrentVersion()}")
+                setRequestProperty("Accept", "application/json")
+            }
+            
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                json.decodeFromString<VersionInfo>(response)
+            } else {
+                throw Exception("HTTP $responseCode: ${connection.responseMessage}")
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+    
+    private suspend fun fetchVersionInfo(version: String): VersionInfo = withContext(Dispatchers.IO) {
+        val url = URL("$UPDATE_CHECK_URL?version=$version")
         val connection = url.openConnection() as HttpURLConnection
         
         try {
